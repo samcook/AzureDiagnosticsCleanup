@@ -1,0 +1,10 @@
+{
+  "AzureTableStorage": {
+    "Url": "https://<mystorageaccount>.table.core.windows.net/",
+    "SASToken": "",
+    "TableName": "WADPerformanceCountersTable"
+  },
+  "CutOffDate": "2018-05-15T13:00:00Z",
+  "MaxDOP": 20,
+  "StatusIntervalSeconds": 10
+}
