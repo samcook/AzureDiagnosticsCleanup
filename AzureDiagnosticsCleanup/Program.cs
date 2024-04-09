@@ -90,8 +90,9 @@ namespace AzureDiagnosticsCleanup
 
             var timer = new Timer(state =>
             {
+                DateTimeOffset? lastQueuedDate = long.TryParse(lastPartitionKey, out var lastPartitionKeyLong) ? ConvertAzTimeToDateTime(lastPartitionKeyLong) : null;
                 // ReSharper disable once AccessToModifiedClosure
-                Console.WriteLine($"Queued: {queued}, Deleted: {deleted}, Txns: {transactions}, Queue Depth: {actionBlock.InputCount}, Elapsed: {sw.Elapsed:g}, Avg del rate: {deleted/sw.Elapsed.TotalSeconds:F0}/sec");
+                Console.WriteLine($"Last: {lastQueuedDate:u}, Queued: {queued}, Deleted: {deleted}, Txns: {transactions}, QD: {actionBlock.InputCount}, Time: {sw.Elapsed:g}, Del rate: {deleted/sw.Elapsed.TotalSeconds:F0}/sec");
             }, null, TimeSpan.Zero, TimeSpan.FromSeconds(statusIntervalSeconds));
 
             await foreach (var entity in tableClient.QueryAsync<TableEntity>(
@@ -150,7 +151,7 @@ namespace AzureDiagnosticsCleanup
             timer.Dispose(waitHandle);
             waitHandle.WaitOne();
 
-            Console.WriteLine($"Deleted {deleted} entries in {transactions} transactions in {sw.Elapsed:g}, avg del rate: {deleted/sw.Elapsed.TotalSeconds:F0}/sec");
+            Console.WriteLine($"Deleted {deleted} entries in {transactions} transactions in {sw.Elapsed:g}, Del rate: {deleted/sw.Elapsed.TotalSeconds:F0}/sec");
         }
 
         public static long ConvertDateTimeToAzTime(DateTimeOffset dateTimeOffset)
