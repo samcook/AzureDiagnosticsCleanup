@@ -1,10 +1,19 @@
 {
   "AzureTableStorage": {
     "Url": "https://<mystorageaccount>.table.core.windows.net/",
-    "SASToken": "",
-    "TableName": "WADPerformanceCountersTable"
+    "SASToken": ""
   },
-  "CutOffDate": "2018-05-15T13:00:00Z",
+  "CutOffDate": "2024-01-01T00:00:00Z",
+
+  "Mode": "", // "WADMetrics", "WADData" or "LinuxData"
+
+  "Data": {
+    // WADData: WADPerformanceCountersTable, WADWindowsEventLogsTable, WADDiagnosticInfrastructureLogsTable
+    // LinuxData: LinuxCpuVer2v0, LinuxDiskVer2v0, LinuxMemoryVer2v0, LinuxsyslogVer2v0
+    "TableName": ""
+  },
+
   "MaxDOP": 20,
-  "StatusIntervalSeconds": 10
+  "StatusIntervalSeconds": 10,
+  "DryRun": true
 }
