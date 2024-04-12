@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Globalization;
 using System.Net;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks.Dataflow;
 using Azure;
 using Azure.Data.Tables;
@@ -40,8 +41,7 @@ namespace AzureDiagnosticsCleanup
             {
                 case "WADMetrics":
                     await adc.CleanupWADMetricsTablesAsync(
-                            "WADMetrics",
-                            s => (s[..21], new DateTimeOffset(int.Parse(s[21..25]), int.Parse(s[25..27]), int.Parse(s[27..29]), 0, 0, 0, TimeSpan.Zero)),
+                            "WADMetricsP",
                             DateTimeOffset.Parse(config["CutOffDate"] ?? throw new ApplicationException("Cutoff Date not specified"), DateTimeFormatInfo.InvariantInfo),
                             config.GetValue("DryRun", true),
                             cts.Token)
@@ -115,7 +115,7 @@ namespace AzureDiagnosticsCleanup
             this.tableServiceClient = tableServiceClient;
         }
 
-        public async Task CleanupWADMetricsTablesAsync(string tablePrefix, Func<string, (string Prefix, DateTimeOffset IntervalStart)> tableNameParser, DateTimeOffset cutoff, bool dryRun, CancellationToken token = default)
+        public async Task CleanupWADMetricsTablesAsync(string tablePrefix, DateTimeOffset cutoff, bool dryRun, CancellationToken token = default)
         {
             Console.WriteLine($"{nameof(CleanupWADMetricsTablesAsync)}({tablePrefix}, {cutoff:u})");
 
@@ -136,13 +136,13 @@ namespace AzureDiagnosticsCleanup
                     break;
                 }
 
-                // WADMetricsPT1HP10DV2S<yyyymmdd> - date is creation date of the table
-                // WADMetricsPT1MP10DV2S<yyyymmdd>
-                // AzureWebJobsHostLogs<yyyymm> (seem small)
-                var (previousNamePrefix, previousIntervalStart) = previousName != null
-                    ? tableNameParser(previousName)
-                    : ((string?)null, (DateTimeOffset?)null);
-                var (currentNamePrefix, currentIntervalStart) = tableNameParser(table.Name);
+                _ = TryParseWADMetricsTableName(previousName, out var previousNamePrefix, out var previousIntervalStart);
+
+                if (!TryParseWADMetricsTableName(table.Name, out var currentNamePrefix, out var currentIntervalStart))
+                {
+                    // skip over entries that don't match the pattern
+                    continue;
+                }
 
                 // if the prefix has changed, ignore the previous details
                 if (previousNamePrefix != currentNamePrefix)
@@ -166,6 +166,38 @@ namespace AzureDiagnosticsCleanup
 
                 previousName = table.Name;
             }
+        }
+
+        private static bool TryParseWADMetricsTableName(string? tableName, out string? prefix, out DateTimeOffset? date)
+        {
+            if (tableName == null)
+            {
+                prefix = null;
+                date = null;
+                return false;
+            }
+
+            // WADMetricsPT1HP10DV2Syyyymmdd
+            // WADMetricsPT1MP10DV2Syyyymmdd
+            // yyyymmdd is creation date of the table
+
+            var match = Regex.Match(tableName, @"(.+PT\d+\wP\d+\wV2S)(\d{4})(\d{2})(\d{2})");
+
+            if (!match.Success)
+            {
+                prefix = null;
+                date = null;
+                return false;
+            }
+
+            prefix = match.Groups[1].Value;
+            date = new DateTimeOffset(
+                    int.Parse(match.Groups[2].Value),
+                    int.Parse(match.Groups[3].Value),
+                    int.Parse(match.Groups[4].Value),
+                    0, 0, 0, TimeSpan.Zero
+                );
+            return true;
         }
 
         public async Task CleanupLinuxDataAsync(string table, DateTimeOffset cutoff, int maxDop, int statusIntervalSeconds, bool dryRun, CancellationToken token = default)
