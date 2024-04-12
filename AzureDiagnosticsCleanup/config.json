@@ -1,6 +1,7 @@
 {
   "AzureTableStorage": {
     "Url": "https://<mystorageaccount>.table.core.windows.net/",
+    "AuthMode": "SASToken", // "SASToken" or "EntraID"
     "SASToken": ""
   },
   "CutOffDate": "2024-01-01T00:00:00Z",

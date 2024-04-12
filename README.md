@@ -6,7 +6,11 @@ Over time the diagnostics tables can grow to a large size, and they are not auto
 
 ## Usage
 
-Obtain the URL and a SAS token for the storage account you want to clean up. The SAS token will need enough permissions to read and delete tables and entities.
+Obtain the URL of the Azure Table Storage account.
+
+The `SASToken` auth mode requires a SAS token with enough permissions to read and delete tables and entities.
+
+The `EntraID` auth mode attempts to authenticate using Azure Entra ID (see [`DefaultAzureCredential`](https://learn.microsoft.com/en-us/dotnet/api/azure.identity.defaultazurecredential) for details about which mechanisms are tried). Ensure the identity has the `Storage Table Data Contributor` role.
 
 Update the `config.json` file with the appropriate settings, or pass values on the command line.
 

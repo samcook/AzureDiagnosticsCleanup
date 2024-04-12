@@ -4,6 +4,7 @@ using System.Net;
 using System.Threading.Tasks.Dataflow;
 using Azure;
 using Azure.Data.Tables;
+using Azure.Identity;
 using Microsoft.Extensions.Configuration;
 
 namespace AzureDiagnosticsCleanup
@@ -33,15 +34,7 @@ namespace AzureDiagnosticsCleanup
 
             ServicePointManager.DefaultConnectionLimit = Math.Max(2, Convert.ToInt32(config["MaxDOP"] ?? "1"));
 
-            var adc = new AzureDiagnosticsCleanup(
-                new TableServiceClient(
-                    new Uri(config["AzureTableStorage:Url"] ?? throw new ApplicationException("Table storage URL not specified")),
-                    new AzureSasCredential(config["AzureTableStorage:SASToken"] ?? throw new ApplicationException("SAS Token not specified"))
-                    //new TableClientOptions
-                    //{
-                    //    Retry = { NetworkTimeout = TimeSpan.FromSeconds(120) }
-                    //}
-                ));
+            var adc = new AzureDiagnosticsCleanup(GetTableServiceClient(config));
 
             switch (config["Mode"])
             {
@@ -50,7 +43,7 @@ namespace AzureDiagnosticsCleanup
                             "WADMetrics",
                             s => (s[..21], new DateTimeOffset(int.Parse(s[21..25]), int.Parse(s[25..27]), int.Parse(s[27..29]), 0, 0, 0, TimeSpan.Zero)),
                             DateTimeOffset.Parse(config["CutOffDate"] ?? throw new ApplicationException("Cutoff Date not specified"), DateTimeFormatInfo.InvariantInfo),
-                            bool.Parse(config["DryRun"] ?? "true"),
+                            config.GetValue("DryRun", true),
                             cts.Token)
                         .ConfigureAwait(false);
                     break;
@@ -59,9 +52,9 @@ namespace AzureDiagnosticsCleanup
                     await adc.CleanupWADDataAsync(
                             config["Data:TableName"] ?? throw new ApplicationException("Table name not specified"),
                             DateTimeOffset.Parse(config["CutOffDate"] ?? throw new ApplicationException("Cutoff Date not specified"), DateTimeFormatInfo.InvariantInfo),
-                            Convert.ToInt32(config["MaxDOP"] ?? "1"),
-                            Convert.ToInt32(config["StatusIntervalSeconds"] ?? "1"),
-                            bool.Parse(config["DryRun"] ?? "true"),
+                            config.GetValue("MaxDOP", 1),
+                            config.GetValue("StatusIntervalSeconds", 1),
+                            config.GetValue("DryRun", true),
                             cts.Token)
                         .ConfigureAwait(false);
 
@@ -71,9 +64,9 @@ namespace AzureDiagnosticsCleanup
                     await adc.CleanupLinuxDataAsync(
                             config["Data:TableName"] ?? throw new ApplicationException("Table name not specified"),
                             DateTimeOffset.Parse(config["CutOffDate"] ?? throw new ApplicationException("Cutoff Date not specified"), DateTimeFormatInfo.InvariantInfo),
-                            Convert.ToInt32(config["MaxDOP"] ?? "1"),
-                            Convert.ToInt32(config["StatusIntervalSeconds"] ?? "1"),
-                            bool.Parse(config["DryRun"] ?? "true"),
+                            config.GetValue("MaxDOP", 1),
+                            config.GetValue("StatusIntervalSeconds", 1),
+                            config.GetValue("DryRun", true),
                             cts.Token)
                         .ConfigureAwait(false);
 
@@ -82,6 +75,30 @@ namespace AzureDiagnosticsCleanup
                 default:
                     Console.WriteLine("Unknown mode");
                     return;
+            }
+        }
+
+        private static TableServiceClient GetTableServiceClient(IConfiguration config)
+        {
+            switch (config["AzureTableStorage:AuthMode"]?.ToLowerInvariant())
+            {
+                case "sastoken":
+                    Console.WriteLine("AuthMode: Using SAS token");
+
+                    return new TableServiceClient(
+                        new Uri(config["AzureTableStorage:Url"] ?? throw new ApplicationException("Table storage URL not specified")),
+                        new AzureSasCredential(config["AzureTableStorage:SASToken"] ?? throw new ApplicationException("SAS Token not specified"))
+                    );
+
+                case "entraid":
+                    Console.WriteLine("AuthMode: Using Azure Identity DefaultAzureCredential provider");
+
+                    return new TableServiceClient(
+                        new Uri(config["AzureTableStorage:Url"] ?? throw new ApplicationException("Table storage URL not specified")),
+                        new DefaultAzureCredential(true));
+
+                default:
+                    throw new ApplicationException("Unknown authentication mode");
             }
         }
     }
@@ -135,17 +152,15 @@ namespace AzureDiagnosticsCleanup
                     previousIntervalStart = null;
                 }
                 
-                Console.WriteLine($"{previousName} => {table.Name}, {previousIntervalStart} => {currentIntervalStart}, {previousNamePrefix}/{currentNamePrefix}");
+                //Console.WriteLine($"{previousName} => {table.Name}, {previousIntervalStart} => {currentIntervalStart}, {previousNamePrefix}/{currentNamePrefix}");
 
                 if (previousName != null && previousIntervalStart != null && currentIntervalStart < cutoff)
                 {
+                    Console.WriteLine($"Delete {previousName}");
+
                     if (!dryRun)
                     {
                         await tableServiceClient.DeleteTableAsync(previousName, CancellationToken.None).ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Delete {previousName}");
                     }
                 }
 
